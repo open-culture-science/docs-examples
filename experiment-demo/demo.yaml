@@ -1,0 +1,72 @@
+# Demo config — single-media perfusion on a four-port chip.
+#
+# Setup this describes:
+#   dispense pump (addr 0):  air, media source, waste, + the two chip inlets
+#   aspirate pump (addr 1):  air, waste,             + the two chip outlets
+#   chip: one chamber, an inlet and an outlet at each of two heights
+#
+# The scripts encode the protocol SHAPE only (loops, call order). Every
+# number lives here.
+#
+# >>> BEFORE THE FIRST RUN, fill in the six values marked TODO. <<<
+# The four chip_ports are null on purpose — make_session() raises on a null
+# rather than letting it reach the valve as a port number.
+
+# Auth: if your rig's habitat API enforces it, the token comes from the
+# HABITAT_API_TOKEN env var, never from this file.
+habitat:
+  url: http://127.0.0.1:8000          # TODO: your rig's habitat URL — 127.0.0.1:8000 if
+                                      # running this on the rig itself (the normal case)
+  chip_id: TODO_CHIP_ID               # TODO: the chip you're running this on
+
+session:
+  working_volume_ul: 500              # the well's working level — what 01 fills to
+  air_backpad_ul: 200                 # air pushed after the initial fill (NOT used by the feeds)
+
+  # uL/s, not firmware speed codes — the server takes top_speed_ul_per_s.
+  slow_speed_code: 138                # chip-facing motions
+  offchip_speed_code: 350             # source / waste / air motions
+
+  tube_line_volume_ul: 760            # source-to-pump tubing volume, used by prime + deprime
+  aspirate_overshoot_ul: 20.0         # compensates for plunger reverse-creep on a full
+                                      # drain; NOT applied to the metered 150 uL feed removals
+  ramp_slope_code: 1                  # gentlest ramp, set on both pumps at session start
+
+  # Only one reagent exists on this rig, so nothing ever triggers an
+  # inter-reagent syringe wash. Pointed at media so that if something does,
+  # it uses the reagent that is actually plumbed in.
+  syringe_wash_reagent_name: media
+  syringe_wash_cycles: 3
+
+  # Four-port chip: one chamber, two heights.
+  #   high_in / low_in    -> dispense pump (addr 0)
+  #   high_out / low_out  -> aspirate pump (addr 1)
+  # chip_inflow_port defaults to high_in, chip_outflow_port to low_out.
+  chip_ports:
+    high_in:  null                    # TODO port number on pump 0
+    low_in:   null                    # TODO port number on pump 0
+    high_out: null                    # TODO port number on pump 1
+    low_out:  null                    # TODO port number on pump 1
+
+# Sources on the dispense pump's distribution valve.
+# Pump 0: air=1, waste=9, media=8.  Pump 1: air=9, waste=1 (both read from
+# the live port-map by role, so they aren't repeated here).
+reagents:
+  media: {port: 8, role: media, label: Culture media}
+
+protocol:
+  events_path: ./events/demo.jsonl
+
+  # 01_prime.py
+  prime_cycles: 1                     # tube-line volumes of media pushed to waste per cycle
+  initial_fill_ul: 500.0              # media dispensed into the chip via high_in
+  initial_fill_air_backpad_ul: 200.0  # air pushed after it to clear the chip-side line
+
+  # 02_experiment.py — feed = remove N uL via high_out, add N uL via high_in
+  feed_cycles: 10
+  feed_volume_ul: 150.0
+  feed_interval_s: 30.0
+
+  # 03_sleep.py
+  sleep_drain_volume_ul: 700.0        # > working_volume_ul so the sweep pulls the chamber dry
+  sleep_purge_air_ul: 300.0           # air pushed through each chip line
